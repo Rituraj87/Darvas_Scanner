@@ -173,7 +173,7 @@ stocks_input = st.text_area("📋 स्कैन करने वाले श�
 my_portfolio_input = st.text_input("💼 आपके खरीदे हुए शेयर (जिनको ट्रैक करना है):", value="HAL, SBIN")
 
 if st.button("🚀 अभी लाइव मार्केट स्कैन करें", use_container_width=True):
-    with st.spinner("Nifty और शेयरों का डार्वस बॉक्स स्कैन हो रहा है... कृपया 10-15 सेकंड रुकें..."):
+    with st.spinner("Nifty और शेयरों का डार्वस बॉक्स स्कैन हो रहा है... कृपया 1-2 मिनट रुकें..."):
         # Nifty 50 का डेटा
         nifty_df = yf.Ticker("^NSEI").history(period="6mo")
         nifty_ret = (float(nifty_df['Close'].iloc[-1]) / float(nifty_df['Close'].iloc[-60])) - 1 if len(nifty_df) >= 60 else 0.0
