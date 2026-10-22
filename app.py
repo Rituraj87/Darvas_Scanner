@@ -5,19 +5,16 @@ import numpy as np
 import requests
 import time
 
-# पेज की सेटिंग
-st.set_page_config(page_title="Darvas Nifty 500 Pro Scanner", page_icon="📈", layout="wide")
+# पेज की सेटिंग (मोबाइल स्क्रीन के हिसाब से)
+st.set_page_config(page_title="Darvas Pro Scanner", page_icon="📈", layout="centered")
 
-st.title("📈 जय श्री राम - Darvas Nifty 500 Pro Scanner (Full Auto)")
-st.caption("Nifty 500 के सभी शेयरों का लाइव डार्वस बॉक्स स्कैनर (BUY • HOLD • EXIT)")
+st.title("📈 जय श्री राम - Darvas Pro App")
+st.caption("लाइव एडवांस डार्वस बॉक्स स्कैनर (BUY • HOLD • EXIT)")
 
-# --- साइडबार सेटिंग्स ---
+# --- साइडबार सेटिंग्स (नोटिफिकेशन और कैपिटल) ---
 st.sidebar.header("⚙️ ऐप सेटिंग्स")
 ntfy_topic = st.sidebar.text_input("मोबाइल अलर्ट कोड (ntfy Topic):", value="darvas_alert_rituraj_108")
 capital = st.sidebar.number_input("आपकी कुल पूंजी (₹):", value=100000, step=10000)
-
-# ऑटो-स्कैन मोड (बिना बटन दबाए काम करेगा)
-auto_scan = st.sidebar.checkbox("🔄 Auto-Pilot Mode चालू करें (हर 15 मिनट में ऑटो-स्कैन)", value=False)
 
 # मोबाइल पर नोटिफिकेशन भेजने का फंक्शन
 def send_mobile_notification(title, message):
@@ -33,12 +30,13 @@ def send_mobile_notification(title, message):
     except Exception:
         return False
 
+# टेस्ट नोटिफिकेशन बटन
 if st.sidebar.button("🔔 फोन पर टेस्ट अलर्ट भेजें"):
-    ok = send_mobile_notification("Darvas Nifty 500 Ready!", "बधाई हो! आपका Nifty 500 स्कैनर आपके फोन से जुड़ गया है।")
+    ok = send_mobile_notification("Darvas Pro Ready!", "बधाई हो! आपका डार्वस स्कैनर आपके फोन से जुड़ गया है।")
     if ok:
         st.sidebar.success("आपके फोन पर अलर्ट भेज दिया गया है!")
 
-# --- असली डार्वस बॉक्स का गणित (3-Day Pivot) ---
+# --- एडवांस डार्वस बॉक्स का गणित (6 Super Filters) ---
 def find_true_darvas_box(df):
     highs = df['High'].values
     lows = df['Low'].values
@@ -47,6 +45,7 @@ def find_true_darvas_box(df):
     if len(df) < 35:
         return None, None
 
+    # पिछले 30 दिनों में 3-Day Pivot के साथ असली बॉक्स ढूँढना
     for i in range(len(df) - 30, len(df) - 4):
         if highs[i] > highs[i+1] and highs[i] > highs[i+2] and highs[i] > highs[i+3]:
             potential_top = highs[i]
@@ -57,24 +56,28 @@ def find_true_darvas_box(df):
                     break
     return box_top, box_bottom
 
-def scan_stock(symbol, nifty_return_60d):
+def scan_stock(symbol, nifty_return_60d, my_holdings):
     try:
         ticker = yf.Ticker(f"{symbol}.NS")
-        df = ticker.history(period="6mo")
-        if df.empty or len(df) < 120:
+        df = ticker.history(period="1y")
+        if df.empty or len(df) < 200:
             return None
 
+        # लाइव/नवीनतम डेटा
         live_price = float(df['Close'].iloc[-1])
         live_volume = float(df['Volume'].iloc[-1])
 
+        # Moving Averages और 52-Week High
         ema_50 = float(df['Close'].ewm(span=50, adjust=False).mean().iloc[-1])
-        ema_200 = float(df['Close'].ewm(span=200, adjust=False).mean().iloc[-1]) if len(df) >= 200 else ema_50
-        high_52w = float(df['High'].max())
+        ema_200 = float(df['Close'].ewm(span=200, adjust=False).mean().iloc[-1])
+        high_52w = float(df['High'].tail(250).max())
         avg_vol_20 = float(df['Volume'].tail(20).iloc[:-1].mean())
 
-        stock_return_60d = (live_price / float(df['Close'].iloc[-60])) - 1 if len(df) >= 60 else 0
+        # Relative Strength (60 दिन की तुलना)
+        stock_return_60d = (live_price / float(df['Close'].iloc[-60])) - 1
         rs_strong = stock_return_60d > nifty_return_60d
 
+        # Darvas Box निकालें
         box_top, box_bottom = find_true_darvas_box(df)
         if not box_top or not box_bottom:
             return None
@@ -82,17 +85,20 @@ def scan_stock(symbol, nifty_return_60d):
         box_width_pct = ((box_top - box_bottom) / box_bottom) * 100
         vol_ratio = round(live_volume / avg_vol_20, 1) if avg_vol_20 > 0 else 1.0
 
+        # एडवांस अपट्रेंड फ़िल्टर
         stage2_uptrend = (
-            live_price > ema_50 and
-            live_price >= (high_52w * 0.82) and
+            live_price > ema_50 > ema_200 and
+            live_price >= (high_52w * 0.85) and
             rs_strong and
-            box_width_pct <= 18.0
+            box_width_pct <= 16.0
         )
 
+        # रिस्क के हिसाब से कितनी क्वांटिटी खरीदें (1% रिस्क नियम)
         risk_per_share = max(live_price - box_bottom, 1.0)
         qty = max(int((capital * 0.01) / risk_per_share), 1)
 
-        if live_price > box_top and stage2_uptrend and vol_ratio >= 1.3:
+        # सिग्नल तय करना
+        if live_price > box_top and stage2_uptrend and vol_ratio >= 1.4:
             signal = "BUY"
         elif live_price < box_bottom:
             signal = "EXIT"
@@ -107,87 +113,65 @@ def scan_stock(symbol, nifty_return_60d):
             "Box Bottom (SL)": round(box_bottom, 2),
             "Box Width": f"{round(box_width_pct, 1)}%",
             "Volume": f"{vol_ratio}x",
-            "Qty (सुझाव)": qty
+            "Qty (सुझाव)": qty,
+            "In Portfolio": symbol in my_holdings
         }
     except Exception:
         return None
 
-# Nifty 500 के चुनिंदा और सबसे लोकप्रिय 100+ लार्ज और मिड-कैप शेयरों की मास्टर लिस्ट (ताकि ऐप सुपर फास्ट चले)
-@st.cache_data
-def get_nifty_500_symbols():
-    return [
-        "RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK", "SBIN", "BHARTIARTL", "LTIM", "ITC", "KOTAKBANK",
-        "LT", "AXISBANK", "HINDUNILVR", "BAJFINANCE", "MARUTI", "SUNPHARMA", "TITAN", "NTPC", "TATAMOTORS",
-        "POWERGRID", "ASIANPAINT", "BAJAJFINSV", "NESTLEIND", "M&M", "TATASTEEL", "GRASIM", "HCLTECH", "ADANIENT",
-        "ADANIPORTS", "COALINDIA", "BAJAJ-AUTO", "ONGC", "WIPRO", "HDFCLIFE", "SBILIFE", "TECHM", "BRITANNIA",
-        "INDUSINDBK", "DIVISLAB", "TATACONSUM", "CIPLA", "APOLLOHOSP", "EICHERMOT", "BPCL", "HEROMOTOCO",
-        "HAL", "BEL", "TRENT", "ZOMATO", "JIOFIN", "NAUKRI", "VEDL", "PIDILITIND", "SBICARD", "DLF",
-        "SIEMENS", "ABB", "CUMMINSIND", "POLYCAB", "DIXON", "PERSISTENT", "TATAELXSI", "MPHASIS", "COFORGE",
-        "MUTHOOTFIN", "CHOLAFIN", "SHRIRAMFIN", "SRF", "AMBUJACEM", "ACC", "SHREECEM", "ICICIGI", "ICICIPRULI"
-    ]
+# --- यूज़र की वॉचलिस्ट और पोर्टफोलियो ---
+default_stocks = "HAL, BEL, TRENT, SBIN, RELIANCE, LT, M&M, SUNPHARMA, BAJFINANCE, TATAELXSI,PERSISTENT, DIXON, POLYCAB, CUMMINSIND, ZOMATO"
+stocks_input = st.text_area("📋 स्कैन करने वाले शेयर (NSE नाम):", value=default_stocks)
+my_portfolio_input = st.text_input("💼 आपके खरीदे हुए शेयर (जिनको ट्रैक करना है):", value="HAL, SBIN")
 
-stock_symbols = get_nifty_500_symbols()
-my_portfolio_input = st.text_input("💼 आपके खरीदे हुए शेयर (कॉमा लगाकर लिखें):", value="HAL, SBIN")
-
-# स्कैन बटन या ऑटो-पायलट मोड
-run_scan = st.button("🚀 Nifty 500 स्कैन शुरू करें", use_container_width=True)
-
-if run_scan or auto_scan:
-    with st.spinner("Nifty 500 के सभी शेयरों का डार्वस बॉक्स स्कैन हो रहा है... कृपया कुछ सेकंड प्रतीक्षा करें..."):
+if st.button("🚀 अभी लाइव मार्केट स्कैन करें", use_container_width=True):
+    with st.spinner("Nifty और शेयरों का डार्वस बॉक्स स्कैन हो रहा है... कृपया 10-15 सेकंड रुकें..."):
+        # Nifty 50 का डेटा
         nifty_df = yf.Ticker("^NSEI").history(period="6mo")
         nifty_ret = (float(nifty_df['Close'].iloc[-1]) / float(nifty_df['Close'].iloc[-60])) - 1 if len(nifty_df) >= 60 else 0.0
 
+        stock_list = [s.strip().upper() for s in stocks_input.split(",") if s.strip()]
         my_holdings = [s.strip().upper() for s in my_portfolio_input.split(",") if s.strip()]
-        results = []
-        
-        # प्रोग्रेस बार
-        progress_bar = st.progress(0)
-        total_stocks = len(stock_symbols)
 
-        for idx, sym in enumerate(stock_symbols):
-            res = scan_stock(sym, nifty_ret)
+        results = []
+        for sym in stock_list:
+            res = scan_stock(sym, nifty_ret, my_holdings)
             if res:
                 results.append(res)
+                # अगर BUY या आपके खरीदे हुए शेयर में EXIT आए तो फोन पर घंटी बजाएं
                 if res["Signal"] == "BUY":
                     send_mobile_notification(
                         f"BUY ALERT: {sym} @ Rs.{res['Live Price (₹)']}",
-                        f"Box Top तोड़ा! Stop Loss: Rs.{res['Box Bottom (SL)']} | Qty: {res['Qty (सुझाव)']}"
+                        f"Box Top Rs.{res['Box Top (Breakout)']} टूटा! Stop Loss: Rs.{res['Box Bottom (SL)']} | Volume: {res['Volume']} | Qty: {res['Qty (सुझाव)']}"
                     )
-                elif res["Signal"] == "EXIT" and sym in my_holdings:
+                elif res["Signal"] == "EXIT" and res["In Portfolio"]:
                     send_mobile_notification(
                         f"EXIT ALERT: {sym} से बाहर निकलें!",
-                        f"प्राइस Rs.{res['Live Price (₹nis'])} आपके Box Bottom के नीचे चला गया है!"
+                        f"प्राइस (Rs.{res['Live Price (₹)']}) आपके Box Bottom (Rs.{res['Box Bottom (SL)']}) के नीचे चला गया है!"
                     )
-            progress_bar.progress((idx + 1) / total_stocks)
-
-        progress_bar.empty()
 
         if results:
             res_df = pd.DataFrame(results)
-            tab1, tab2, tab3 = st.tabs(["🟢 BUY (खरीदने योग्य)", "🟡 HOLD (होल्ड करें)", "🔴 EXIT (बेच दें)"])
+            tab1, tab2, tab3 = st.tabs(["🟢 BUY (एंट्री लें)", "🟡 HOLD (बने रहें)", "🔴 EXIT (निकल जाएं)"])
 
             with tab1:
                 buy_df = res_df[res_df["Signal"] == "BUY"]
                 if not buy_df.empty:
-                    st.success(f"कुल {len(buy_df)} शेयरों में शानदार एडवांस ब्रेकआउट मिला है!")
+                    st.success("इन शेयरों में एडवांस डार्वस ब्रेकआउट हुआ है!")
                     st.dataframe(buy_df, use_container_width=True)
                 else:
-                    st.info("वर्तमान में किसी शेयर में ब्रेकआउट नहीं है।")
+                    st.info("अभी किसी शेयर में पक्का एडवांस ब्रेकआउट नहीं है।")
 
             with tab2:
                 hold_df = res_df[res_df["Signal"] == "HOLD"]
+                st.write("ये शेयर अपने बॉक्स के अंदर सुरक्षित हैं (Trailing SL के साथ होल्ड करें):")
                 st.dataframe(hold_df, use_container_width=True)
 
             with tab3:
                 exit_df = res_df[res_df["Signal"] == "EXIT"]
                 if not exit_df.empty:
-                    st.error("सावधान! इन शेयरों ने अपना स्टॉप-लॉस तोड़ दिया है:")
+                    st.error("सावधान! इन शेयरों ने अपना Box Bottom (Stop-Loss) तोड़ दिया है:")
                     st.dataframe(exit_df, use_container_width=True)
                 else:
-                    st.success("कोई भी शेयर खतरे में नहीं है।")
-
-    # अगर Auto-Pilot ऑन है, तो यह हर 15 मिनट (900 सेकंड) में अपने आप रिफ्रेश होकर दोबारा स्कैन करेगा
-    if auto_scan:
-        time.sleep(900)
-        st.rerun()
-    
+                    st.success("कोई भी शेयर खतरे के निशान (Box Bottom) के नीचे नहीं है।")
+                    
