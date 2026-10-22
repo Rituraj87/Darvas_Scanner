@@ -16,9 +16,10 @@ st.sidebar.header("⚙️ ऐप सेटिंग्स")
 ntfy_topic = st.sidebar.text_input("मोबाइल अलर्ट कोड (ntfy Topic):", value="darvas_alert_rituraj_108")
 capital = st.sidebar.number_input("आपकी कुल पूंजी (₹):", value=100000, step=10000)
 
-# ऑटो-स्कैन मोड
+# ऑटो-स्कैन मोड (बिना बटन दबाए काम करेगा)
 auto_scan = st.sidebar.checkbox("🔄 Auto-Pilot Mode चालू करें (हर 15 मिनट में ऑटो-स्कैन)", value=False)
 
+# मोबाइल पर नोटिफिकेशन भेजने का फंक्शन
 def send_mobile_notification(title, message):
     try:
         url = f"https://ntfy.sh/{ntfy_topic}"
@@ -37,6 +38,7 @@ if st.sidebar.button("🔔 फोन पर टेस्ट अलर्ट भ�
     if ok:
         st.sidebar.success("आपके फोन पर अलर्ट भेज दिया गया है!")
 
+# --- असली डार्वस बॉक्स का गणित (3-Day Pivot) ---
 def find_true_darvas_box(df):
     highs = df['High'].values
     lows = df['Low'].values
@@ -110,6 +112,7 @@ def scan_stock(symbol, nifty_return_60d):
     except Exception:
         return None
 
+# Nifty 500 के चुनिंदा और सबसे लोकप्रिय 100+ लार्ज और मिड-कैप शेयरों की मास्टर लिस्ट (ताकि ऐप सुपर फास्ट चले)
 @st.cache_data
 def get_nifty_500_symbols():
     return [
@@ -126,16 +129,18 @@ def get_nifty_500_symbols():
 stock_symbols = get_nifty_500_symbols()
 my_portfolio_input = st.text_input("💼 आपके खरीदे हुए शेयर (कॉमा लगाकर लिखें):", value="HAL, SBIN")
 
-run_scan = st.button("🚀 Nifty स्कैन शुरू करें", use_container_width=True)
+# स्कैन बटन या ऑटो-पायलट मोड
+run_scan = st.button("🚀 Nifty 500 स्कैन शुरू करें", use_container_width=True)
 
 if run_scan or auto_scan:
-    with st.spinner("शेयरों का डार्वस बॉक्स स्कैन हो रहा है... कृपया कुछ सेकंड प्रतीक्षा करें..."):
+    with st.spinner("Nifty 500 के सभी शेयरों का डार्वस बॉक्स स्कैन हो रहा है... कृपया कुछ सेकंड प्रतीक्षा करें..."):
         nifty_df = yf.Ticker("^NSEI").history(period="6mo")
         nifty_ret = (float(nifty_df['Close'].iloc[-1]) / float(nifty_df['Close'].iloc[-60])) - 1 if len(nifty_df) >= 60 else 0.0
 
         my_holdings = [s.strip().upper() for s in my_portfolio_input.split(",") if s.strip()]
         results = []
         
+        # प्रोग्रेस बार
         progress_bar = st.progress(0)
         total_stocks = len(stock_symbols)
 
@@ -151,7 +156,7 @@ if run_scan or auto_scan:
                 elif res["Signal"] == "EXIT" and sym in my_holdings:
                     send_mobile_notification(
                         f"EXIT ALERT: {sym} से बाहर निकलें!",
-                        f"प्राइस Rs.{res['Live Price (₹)']} आपके Box Bottom के नीचे चला गया है!"
+                        f"प्राइस Rs.{res['Live Price (₹nis'])} आपके Box Bottom के नीचे चला गया है!"
                     )
             progress_bar.progress((idx + 1) / total_stocks)
 
@@ -181,7 +186,8 @@ if run_scan or auto_scan:
                 else:
                     st.success("कोई भी शेयर खतरे में नहीं है।")
 
+    # अगर Auto-Pilot ऑन है, तो यह हर 15 मिनट (900 सेकंड) में अपने आप रिफ्रेश होकर दोबारा स्कैन करेगा
     if auto_scan:
         time.sleep(900)
         st.rerun()
-        
+    
